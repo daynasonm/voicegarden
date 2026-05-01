@@ -11,6 +11,7 @@ const headStatus = document.querySelector("#headStatus");
 const imageStatus = document.querySelector("#imageStatus");
 const soundStatus = document.querySelector("#soundStatus");
 const nightButton = document.querySelector('[data-command="night"]');
+const voiceButton = document.querySelector('[data-command="voice"]');
 const echoBursts = [...document.querySelectorAll(".echo-burst")];
 
 const audioApi = {
@@ -40,12 +41,24 @@ let smoothedLookX = 0.5;
 let smoothedLookY = 0.5;
 let recognition;
 let listening = false;
+let voiceArmed = false;
+let activeSeason = "garden";
+let revealTimers = [];
+let imageLoadId = 0;
 
 const setCssNumber = (name, value) => {
   document.documentElement.style.setProperty(name, Number(value).toFixed(4));
 };
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+const smoothLook = (current, target, speed = 0.26) => current + (target - current) * speed;
+const applyDeadZone = (value, center = 0.5, radius = 0.025) => {
+  const offset = value - center;
+  if (Math.abs(offset) <= radius) {
+    return center;
+  }
+  return center + Math.sign(offset) * (Math.abs(offset) - radius);
+};
 const rms = (data, start = 0, end = data.length) => {
   let sum = 0;
   for (let index = start; index < end; index += 1) {
@@ -55,7 +68,8 @@ const rms = (data, start = 0, end = data.length) => {
   return Math.sqrt(sum / Math.max(1, end - start));
 };
 
-const commonsSearchTerms = [
+const seasonalSearchTerms = {
+  garden: [
   "flower macro pistil stamen",
   "hibiscus flower macro stamen",
   "mallow flower macro",
@@ -70,7 +84,66 @@ const commonsSearchTerms = [
   "petal veins macro",
   "botanical specimen flower close up",
   "macro photograph flower center"
-];
+  ],
+  spring: [
+    "spring blossom flower macro",
+    "cherry blossom spring flower",
+    "tulip garden spring",
+    "daffodil flower spring",
+    "crocus flower spring",
+    "magnolia blossom spring",
+    "hyacinth spring flower",
+    "spring wildflowers meadow",
+    "apple blossom macro",
+    "fresh green leaves spring",
+    "primrose spring flower",
+    "botanical spring flowers"
+  ],
+  summer: [
+    "summer wildflowers meadow",
+    "sunflower summer garden",
+    "hibiscus summer flower",
+    "zinnia summer flower",
+    "dahlia summer garden",
+    "lavender field summer",
+    "cosmos flower summer",
+    "water lily summer pond",
+    "rose garden summer",
+    "poppy summer flower",
+    "bright summer garden plants",
+    "summer flower macro"
+  ],
+  fall: [
+    "autumn flowers garden",
+    "fall chrysanthemums flower",
+    "aster flower autumn",
+    "goldenrod autumn flower",
+    "autumn leaves plant",
+    "maple leaves fall color",
+    "dahlia autumn flower",
+    "marigold fall garden",
+    "sedum autumn flower",
+    "fall meadow plants",
+    "orange autumn flower macro",
+    "botanical autumn plants"
+  ],
+  winter: [
+    "winter jasmine flower",
+    "hellebore winter flower",
+    "snowdrop flower winter",
+    "camellia winter flower",
+    "evergreen plant winter",
+    "frosted leaves plant",
+    "winter berries plant",
+    "pine needles frost",
+    "holly leaves berries winter",
+    "witch hazel winter flower",
+    "winter garden plants",
+    "flower snow winter"
+  ]
+};
+
+const seasonWords = Object.keys(seasonalSearchTerms).filter((season) => season !== "garden");
 
 const extraTileCount = 30;
 
@@ -178,6 +251,9 @@ const getImageElements = () =>
     .filter(Boolean);
 
 const startImageReveal = () => {
+  revealTimers.forEach((timer) => window.clearTimeout(timer));
+  revealTimers = [];
+
   const elements = getImageElements();
   elements.forEach((element, index) => {
     element.style.setProperty("--tile-visible", index === 0 ? "1" : "0");
@@ -185,12 +261,13 @@ const startImageReveal = () => {
   imageStatus.textContent = `1/${elements.length}`;
 
   elements.slice(1).forEach((element, index) => {
-    window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       element.style.setProperty("--tile-visible", "1");
       imageStatus.textContent = `${index + 2}/${elements.length}`;
       setCssNumber("--overdrive", Math.min(1, (index + 2) / elements.length));
       pulseGarden(0.35 + Math.min(0.65, (index + 2) / elements.length));
     }, (index + 1) * revealIntervalMs);
+    revealTimers.push(timer);
   });
 };
 
@@ -229,9 +306,19 @@ const getCommonsImages = async (term) => {
     .filter((image) => image.url && /^image\/(jpeg|png|webp)$/i.test(image.mime ?? ""));
 };
 
-const loadGardenImages = async () => {
+const loadGardenImages = async (season = activeSeason) => {
+  const terms = seasonalSearchTerms[season] || seasonalSearchTerms.garden;
+  const loadId = imageLoadId + 1;
+  imageLoadId = loadId;
+  activeSeason = season;
+  imageStatus.textContent = season === "garden" ? "loading" : season;
+
   try {
-    const groups = await Promise.all(commonsSearchTerms.map(getCommonsImages));
+    const groups = await Promise.all(terms.map(getCommonsImages));
+    if (loadId !== imageLoadId) {
+      return;
+    }
+
     const images = groups.flat();
     const seen = new Set();
     const uniqueImages = images.filter((image) => {
@@ -262,10 +349,16 @@ const loadGardenImages = async () => {
       element.title = `Wikimedia Commons: ${image.title}`;
     });
 
-    imageStatus.textContent = `${Math.min(uniqueImages.length, imageTargets.length)} commons`;
+    imageStatus.textContent = season === "garden"
+      ? `${Math.min(uniqueImages.length, imageTargets.length)} commons`
+      : season;
     startImageReveal();
   } catch {
-    imageStatus.textContent = "fallback";
+    if (loadId !== imageLoadId) {
+      return;
+    }
+
+    imageStatus.textContent = season === "garden" ? "fallback" : `${season} fallback`;
     startImageReveal();
   }
 };
@@ -484,7 +577,13 @@ const applyCommand = async (command) => {
   const text = command.toLowerCase();
   voiceStatus.textContent = text;
 
-  if (text.includes("listen") || text.includes("play") || text.includes("sound")) {
+  const season = seasonWords.find((word) => text.includes(word));
+  if (season && season !== activeSeason) {
+    await loadGardenImages(season);
+    pulseGarden(1);
+  }
+
+  if (text.includes("play") || text.includes("sound")) {
     await startSound();
     pulseGarden(0.65);
   }
@@ -508,6 +607,10 @@ const setupVoice = () => {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     voiceStatus.textContent = "unsupported";
+    if (voiceButton) {
+      voiceButton.textContent = "No voice";
+      voiceButton.disabled = true;
+    }
     return;
   }
 
@@ -515,15 +618,35 @@ const setupVoice = () => {
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.lang = "en-US";
+  voiceStatus.textContent = "tap to speak";
+  if (voiceButton) {
+    voiceButton.textContent = "Speak";
+  }
 
   recognition.onstart = () => {
     listening = true;
     voiceStatus.textContent = "listening";
+    if (voiceButton) {
+      voiceButton.textContent = "Stop";
+    }
   };
 
   recognition.onend = () => {
     listening = false;
-    voiceStatus.textContent = "paused";
+    voiceArmed = false;
+    voiceStatus.textContent = "tap to speak";
+    if (voiceButton) {
+      voiceButton.textContent = "Speak";
+    }
+  };
+
+  recognition.onerror = (event) => {
+    listening = false;
+    voiceArmed = false;
+    voiceStatus.textContent = event.error === "not-allowed" ? "mic blocked" : event.error;
+    if (voiceButton) {
+      voiceButton.textContent = "Speak";
+    }
   };
 
   recognition.onresult = (event) => {
@@ -537,6 +660,62 @@ const setupVoice = () => {
     }
   };
 };
+
+const startVoiceListening = () => {
+  if (listening) {
+    return;
+  }
+
+  if (!recognition) {
+    voiceStatus.textContent = "unsupported";
+    return;
+  }
+
+  voiceArmed = true;
+  voiceStatus.textContent = "starting";
+  if (voiceButton) {
+    voiceButton.textContent = "Stop";
+  }
+
+  try {
+    recognition.start();
+  } catch (error) {
+    voiceArmed = false;
+    if (voiceButton) {
+      voiceButton.textContent = "Speak";
+    }
+    voiceStatus.textContent = "tap again";
+  }
+};
+
+const stopVoiceListening = () => {
+  if (!recognition || !listening) {
+    return;
+  }
+
+  voiceArmed = false;
+  recognition.stop();
+  voiceStatus.textContent = "processing";
+  if (voiceButton) {
+    voiceButton.textContent = "Speak";
+  }
+};
+
+const toggleVoiceListening = () => {
+  if (listening) {
+    stopVoiceListening();
+  } else {
+    startVoiceListening();
+  }
+};
+
+if (voiceButton) {
+  voiceButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleVoiceListening();
+  });
+}
 
 const setupMediaPipe = async () => {
   try {
@@ -594,12 +773,15 @@ const trackMediaPipe = () => {
       const faceHeight = Math.max(0.18, Math.abs(chin.y - forehead.y));
       const yaw = (nose.x - eyeMidX) / eyeSpan;
       const pitch = (nose.y - eyeMidY) / faceHeight;
-      const headLift = nose.y - 0.5;
-      const lookX = clamp(0.5 - yaw * 5.8, -0.15, 1.15);
-      const lookY = clamp(0.5 + headLift * 3.4 + pitch * 2.4, -0.25, 1.25);
+      const faceCenterX = (leftEyeOuter.x + rightEyeOuter.x + nose.x) / 3;
+      const faceCenterY = (forehead.y + chin.y + nose.y) / 3;
+      const headX = applyDeadZone(1 - faceCenterX);
+      const headY = applyDeadZone(faceCenterY);
+      const lookX = clamp(0.5 + (headX - 0.5) * 1.85 - yaw * 0.72);
+      const lookY = clamp(0.5 + (headY - 0.5) * 1.55 + pitch * 0.46);
 
-      smoothedLookX += (lookX - smoothedLookX) * 0.18;
-      smoothedLookY += (lookY - smoothedLookY) * 0.14;
+      smoothedLookX = smoothLook(smoothedLookX, lookX, 0.28);
+      smoothedLookY = smoothLook(smoothedLookY, lookY, 0.24);
       setGardenLook(smoothedLookX, smoothedLookY);
 
       if (smoothedLookY < 0.34) {
@@ -634,8 +816,8 @@ window.addEventListener("pointermove", (event) => {
 document.querySelectorAll("[data-command]").forEach((button) => {
   button.addEventListener("click", async () => {
     const command = button.dataset.command;
-    if (command === "listen" && recognition && !listening) {
-      recognition.start();
+    if (command === "voice") {
+      return;
     }
     if (environmentAudioContext?.state === "suspended") {
       await environmentAudioContext.resume();
