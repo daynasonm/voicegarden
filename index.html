@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Voice Garden</title>
+    <link rel="preconnect" href="https://images.unsplash.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="garden-shell">
+      <div class="scene specimen-mode" id="scene" aria-label="An interactive layered garden controlled by voice, face direction, and hand movement">
+        <div class="skywash layer" data-depth="0.08"></div>
+
+        <div class="tile fountain-wide layer" data-depth="0.18"></div>
+        <div class="tile rose-bed layer" data-depth="0.26"></div>
+        <div class="tile glass-vase layer" data-depth="0.36"></div>
+        <div class="tile lilies layer" data-depth="0.44"></div>
+        <div class="tile fountain-slice layer" data-depth="0.58"></div>
+        <div class="tile orchid-stack layer" data-depth="0.7"></div>
+        <div class="tile meadow-band layer" data-depth="0.88"></div>
+        <div class="tile vase-tall layer" data-depth="1.05"></div>
+        <div class="tile water-column layer" data-depth="1.18"></div>
+        <div class="tile flower-close layer" data-depth="1.35"></div>
+        <div class="tile pond-mosaic layer" data-depth="0.32"></div>
+        <div class="tile botanical-window layer" data-depth="0.64"></div>
+        <div class="tile peony-ribbon layer" data-depth="0.96"></div>
+        <div class="tile garden-arch layer" data-depth="1.28"></div>
+
+        <div class="bio-hud" aria-hidden="true">
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+          <span class="echo-burst"></span>
+        </div>
+        <div class="fireflies" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <nav class="garden-nav" aria-label="Garden controls">
+          <strong>Voice Garden</strong>
+          <button type="button" data-command="night">Night</button>
+          <button type="button" data-command="listen">Listen</button>
+        </nav>
+
+        <section class="status-panel" aria-live="polite">
+          <div>
+            <span class="label">voice</span>
+            <strong id="voiceStatus">idle</strong>
+          </div>
+          <div>
+            <span class="label">head</span>
+            <strong id="headStatus">waiting</strong>
+          </div>
+          <div>
+            <span class="label">images</span>
+            <strong id="imageStatus">loading</strong>
+          </div>
+          <div>
+            <span class="label">sound</span>
+            <strong id="soundStatus">muted</strong>
+          </div>
+        </section>
+
+        <video id="webcam" class="webcam" autoplay playsinline muted></video>
+      </div>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
